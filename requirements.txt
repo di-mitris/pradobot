@@ -1,0 +1,76 @@
+# Financial ML Pipeline Requirements
+# Optimized for Hetzner Cloud (4 vCPU, 8GB RAM, x86_64)
+
+# Core scientific computing
+numpy>=1.24.0
+pandas>=2.0.0
+scipy>=1.10.0
+
+# Machine learning
+scikit-learn>=1.3.0
+statsmodels>=0.14.0
+xgboost>=2.0.0  # Added for better models
+lightgbm>=4.0.0  # Added for faster training
+
+# Async and database
+aiosqlite>=0.19.0
+websockets>=12.0
+asyncio>=3.4.3
+
+# Data visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+plotly>=5.15.0
+
+# Configuration and logging
+pyyaml>=6.0
+python-dotenv>=1.0.0
+loguru>=0.7.0
+python-json-logger>=2.0.0
+
+# System monitoring
+psutil>=5.9.0
+
+# Time series analysis
+arch>=6.2.0
+ta-lib>=0.4.25
+
+# Utilities
+tqdm>=4.65.0
+click>=8.1.0
+schedule>=1.2.0
+python-dateutil>=2.8.0
+
+# Model persistence
+joblib>=1.3.0
+
+# Parallel processing (optimized for x86_64)
+numba>=0.58.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# Code quality
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
+
+# HTTP client (for API integrations)
+httpx>=0.25.0
+aiohttp>=3.9.0
+
+# Optional: PostgreSQL support (for TimescaleDB migration)
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.0
+
+# Optional: Redis for caching
+redis>=5.0.0
+
+# Optional: Prometheus metrics
+prometheus-client>=0.19.0
+
+# Optional: Health check server
+fastapi>=0.104.0
+uvicorn>=0.24.0

@@ -1,0 +1,311 @@
+# Financial ML Pipeline Configuration
+# Optimized for Hetzner Cloud (4 vCPU, 8GB RAM)
+
+# System Configuration
+system:
+  max_memory_usage: 7.0  # GB - Leave 1GB for OS overhead
+  max_cpu_cores: 4       # Use all 4 vCPUs
+  log_level: "INFO"
+  log_file: "/var/log/financial_ml/pipeline.log"
+  pid_file: "/var/run/financial_ml.pid"
+  timezone: "UTC"
+
+# Database Configuration
+database:
+  type: "sqlite"
+  sqlite:
+    path: "/opt/financial_ml/data/financial_data.db"
+    journal_mode: "WAL"
+    synchronous: "NORMAL"
+    cache_size: 200000  # ~200MB cache (increased from Pi)
+    temp_store: "MEMORY"
+    mmap_size: 1073741824  # 1GB memory-mapped I/O
+  # PostgreSQL/TimescaleDB config for future scaling
+  timescaledb:
+    host: "localhost"
+    port: 5432
+    database: "financial_ml"
+    username: "financial_ml"
+    password: "${POSTGRES_PASSWORD}"
+    pool_size: 10
+    max_overflow: 20
+
+# Data Ingestion Configuration
+data_ingestion:
+  # Kraken WebSocket settings
+  websocket:
+    uri: "wss://ws.kraken.com/v2"
+    reconnect_delay: 5.0
+    max_reconnect_attempts: 20
+    ping_interval: 30
+    ping_timeout: 10
+
+  # Trading pairs to monitor
+  symbols:
+    algorithmic:
+      - "BTC/USD"
+      - "ETH/USD"
+    swing:
+      - "BTC/USD"
+      - "ETH/USD"
+      - "ADA/USD"
+      - "DOT/USD"
+      - "SOL/USD"
+      - "AVAX/USD"
+
+  # Bar construction settings (scaled up for cloud)
+  bars:
+    algorithmic:
+      tick: 500
+      volume: 5.0
+      dollar: 50000
+      dollar_imbalance: 25000
+    swing:
+      tick: 5000
+      volume: 50.0
+      dollar: 500000
+      dollar_imbalance: 250000
+
+  # Event detection
+  cusum_filter:
+    algorithmic_threshold: 0.005
+    swing_threshold: 0.02
+
+  # Storage settings (optimized for SSD)
+  storage:
+    batch_size: 100
+    flush_interval: 30
+    max_memory_buffer: 50000  # Increased buffer
+    db_pool_size: 5
+
+# Feature Engineering Configuration
+feature_engineering:
+  # Fractional differentiation
+  fractional_diff:
+    max_d: 1.0
+    step: 0.05
+    threshold: 1e-5
+    min_samples: 50
+
+  # Technical indicators
+  indicators:
+    rsi_window: 14
+    bollinger_window: 20
+    bollinger_std: 2.0
+    volume_ma_window: 20
+    volatility_window: 20
+
+  # Lookback periods
+  lookback_periods: [5, 10, 20, 50]
+
+# Labeling Configuration
+labeling:
+  triple_barrier:
+    profit_taking_factor: 1.0
+    stop_loss_factor: 1.0
+    min_target_return: 0.005
+    max_holding_period_hours: 24
+
+  meta_labeling:
+    enabled: true
+    primary_model: "trend_following"
+
+  volatility:
+    span: 100
+
+# Sample Weighting
+sample_weighting:
+  uniqueness:
+    enabled: true
+    min_uniqueness: 0.01
+  return_attribution:
+    enabled: true
+  time_decay:
+    enabled: true
+    decay_factor: 0.95
+
+# Cross-Validation
+cross_validation:
+  method: "purged_kfold"
+  n_splits: 5
+  embargo_pct: 0.02
+  min_train_samples: 100
+
+# Machine Learning Configuration (optimized for more resources)
+machine_learning:
+  models:
+    random_forest:
+      n_estimators: 1000  # Increased from Pi
+      max_features: "sqrt"
+      max_depth: 12
+      min_samples_split: 10
+      class_weight: "balanced"
+      n_jobs: 4  # Use all cores
+
+    bagging:
+      n_estimators: 500
+      max_samples: 0.8
+      max_features: 1.0
+
+  feature_importance:
+    methods: ["mdi", "mda"]
+    top_n_features: 20
+
+  hyperparameter_tuning:
+    enabled: true
+    method: "random_search"
+    n_iter: 100
+    cv_folds: 5
+
+# Strategy Discovery Configuration
+strategy_discovery:
+  minimum_requirements:
+    min_samples: 500
+    min_cv_score: 0.55
+    min_feature_importance: 0.05
+
+  strategy_types:
+    - "momentum"
+    - "mean_reversion"
+    - "breakout"
+    - "volatility"
+
+  risk_management:
+    max_position_size: 0.1
+    max_daily_trades: 10
+    max_drawdown: 0.05
+    kelly_fraction: 0.25
+
+  signals:
+    confidence_threshold: 0.6
+    hold_time_hours: 2
+    cooldown_hours: 1
+
+# Monitoring Configuration
+monitoring:
+  system_monitoring:
+    check_interval: 60
+    memory_alert_threshold: 0.85
+    cpu_alert_threshold: 0.90
+    disk_alert_threshold: 0.85
+
+  performance_monitoring:
+    track_latency: true
+    track_throughput: true
+    save_metrics_interval: 300
+
+  health_checks:
+    websocket_timeout: 60
+    database_timeout: 30
+    model_prediction_timeout: 10
+    
+  # Prometheus metrics (optional)
+  prometheus:
+    enabled: false
+    port: 9090
+
+# Scheduling Configuration
+scheduling:
+  data_ingestion:
+    mode: "service"
+    restart_policy: "always"
+
+  feature_engineering:
+    mode: "cron"
+    schedule: "0 */4 * * *"
+
+  model_training:
+    mode: "cron"
+    schedule: "0 2 * * *"
+
+  strategy_discovery:
+    mode: "cron"
+    schedule: "0 3 * * 0"  # Weekly on Sunday
+
+# Paths Configuration
+paths:
+  base_dir: "/opt/financial_ml"
+  data_dir: "/opt/financial_ml/data"
+  models_dir: "/opt/financial_ml/models"
+  logs_dir: "/var/log/financial_ml"
+  cache_dir: "/tmp/financial_ml"
+
+# Development/Testing
+development:
+  debug_mode: false
+  save_intermediate_results: true
+  mock_trading: true
+  paper_trading_balance: 10000
+
+# Cloud Deployment Settings
+cloud:
+  provider: "hetzner"
+  instance_type: "CPX21"  # 4 vCPU, 8GB RAM
+  region: "fsn1"
+  
+  # Resource allocation
+  resources:
+    cpu_limit: 4
+    memory_limit: "7G"
+    
+  # Networking
+  networking:
+    enable_ipv6: true
+    firewall:
+      - port: 22
+        protocol: tcp
+        source: "0.0.0.0/0"
+      - port: 8080
+        protocol: tcp
+        source: "0.0.0.0/0"
+      - port: 9090
+        protocol: tcp
+        source: "10.0.0.0/8"
+
+  # Backup settings
+  backup:
+    enabled: true
+    schedule: "0 4 * * *"
+    retention_days: 7
+    destination: "/opt/financial_ml/backups"
+
+# Logging Configuration
+logging:
+  version: 1
+  disable_existing_loggers: false
+  
+  formatters:
+    standard:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    json:
+      class: "pythonjsonlogger.jsonlogger.JsonFormatter"
+      format: "%(asctime)s %(name)s %(levelname)s %(message)s"
+  
+  handlers:
+    console:
+      class: "logging.StreamHandler"
+      level: "INFO"
+      formatter: "standard"
+      stream: "ext://sys.stdout"
+    
+    file:
+      class: "logging.handlers.RotatingFileHandler"
+      level: "INFO"
+      formatter: "standard"
+      filename: "/var/log/financial_ml/pipeline.log"
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+    
+    error_file:
+      class: "logging.handlers.RotatingFileHandler"
+      level: "ERROR"
+      formatter: "standard"
+      filename: "/var/log/financial_ml/error.log"
+      maxBytes: 10485760
+      backupCount: 10
+  
+  loggers:
+    "":
+      level: "INFO"
+      handlers: ["console", "file", "error_file"]
+      propagate: true
