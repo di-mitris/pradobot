@@ -290,21 +290,22 @@ create_directories() {
 # =============================================================================
 
 clone_repository() {
-    log_step "Cloning repository from GitHub"
+    log_step "Cloning repository from GitHub" >&2
     
     local CLONE_DIR="/tmp/financial-ml-deploy-$$"
     
     # Clean up any existing clone
     rm -rf "$CLONE_DIR"
     
-    log_info "Cloning https://github.com/${GITHUB_REPO}.git (branch: $GIT_BRANCH)"
-    run_cmd git clone --depth 1 --branch "$GIT_BRANCH" \
-        "https://github.com/${GITHUB_REPO}.git" "$CLONE_DIR"
+    log_info "Cloning https://github.com/${GITHUB_REPO}.git (branch: $GIT_BRANCH)" >&2
+    git clone --depth 1 --branch "$GIT_BRANCH" \
+        "https://github.com/${GITHUB_REPO}.git" "$CLONE_DIR" >&2 2>&1
     
-    # Debug: Show repository structure
-    log_info "Repository contents:"
-    find "$CLONE_DIR" -type f -name "*.py" -o -name "*.yaml" -o -name "*.yml" -o -name "*.conf" -o -name "*.sh" 2>/dev/null | head -20
+    # Debug: Show repository structure (output to stderr so it doesn't pollute return value)
+    log_info "Repository contents:" >&2
+    find "$CLONE_DIR" -type f \( -name "*.py" -o -name "*.yaml" -o -name "*.yml" -o -name "*.conf" -o -name "*.sh" -o -name "*.txt" \) 2>/dev/null | head -20 >&2
     
+    # Only this goes to stdout (the return value)
     echo "$CLONE_DIR"
 }
 
@@ -367,19 +368,26 @@ install_python_packages() {
     
     local CLONE_DIR="$1"
     
+    # Debug: Show what CLONE_DIR contains
+    log_info "Looking for requirements in: $CLONE_DIR"
+    
     # Find requirements.txt anywhere in the repo
-    local REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements.txt")
+    local REQUIREMENTS=""
+    REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements.txt") || true
     
     # Also check for requirements_txt.txt (alternative name)
     if [[ -z "$REQUIREMENTS" ]]; then
-        REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements_txt.txt")
+        REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements_txt.txt") || true
     fi
     
     if [[ -n "$REQUIREMENTS" ]] && [[ -f "$REQUIREMENTS" ]]; then
         log_info "Found requirements at: $REQUIREMENTS"
+        log_info "Installing packages from requirements.txt..."
         run_cmd "$INSTALL_DIR/venv/bin/pip" install -r "$REQUIREMENTS"
     else
         log_warn "requirements.txt not found, installing core packages..."
+        log_info "Files in clone dir:"
+        ls -la "$CLONE_DIR" || true
         run_cmd "$INSTALL_DIR/venv/bin/pip" install \
             numpy pandas scipy scikit-learn statsmodels \
             aiosqlite websockets matplotlib seaborn \
@@ -1114,6 +1122,13 @@ main() {
     
     # Clone and deploy
     CLONE_DIR=$(clone_repository)
+    
+    # Verify CLONE_DIR was set correctly
+    if [[ -z "$CLONE_DIR" ]] || [[ ! -d "$CLONE_DIR" ]]; then
+        log_error "Failed to clone repository. CLONE_DIR='$CLONE_DIR'"
+        exit 1
+    fi
+    log_info "Repository cloned to: $CLONE_DIR"
     
     setup_virtualenv
     install_python_packages "$CLONE_DIR"
