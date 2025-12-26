@@ -1,0 +1,112 @@
+# /etc/systemd/system/financial-ml-ingestion.service
+# Data ingestion service for Financial ML Pipeline
+
+[Unit]
+Description=Financial ML Data Ingestion Service
+Documentation=https://github.com/your-repo/financial-ml-pipeline
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/financial_ml
+ExecStart=/opt/financial_ml/venv/bin/python -m data_ingestion --config /opt/financial_ml/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=financial-ml-ingestion
+
+# Security settings
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/financial_ml/data
+ReadWritePaths=/var/log/financial_ml
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+
+# Resource limits for Raspberry Pi
+MemoryLimit=2G
+CPUQuota=75%
+TasksMax=100
+
+# Environment
+Environment=PYTHONPATH=/opt/financial_ml
+Environment=PYTHONUNBUFFERED=1
+
+# Raspberry Pi specific optimizations
+CPUAffinity=1 2 3
+IOSchedulingClass=2
+IOSchedulingPriority=4
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
+
+# Additional timer service for scheduled tasks
+# /etc/systemd/system/financial-ml-training.service
+[Unit]
+Description=Financial ML Training Service
+After=financial-ml-ingestion.service
+Requires=financial-ml-ingestion.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+WorkingDirectory=/opt/financial_ml
+ExecStart=/opt/financial_ml/venv/bin/python -m ml_pipeline --mode train
+StandardOutput=journal
+StandardError=journal
+TimeoutSec=3600
+MemoryLimit=4G
+
+# /etc/systemd/system/financial-ml-training.timer
+[Unit]
+Description=Run Financial ML Training Daily
+Requires=financial-ml-training.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+
+# /etc/systemd/system/financial-ml-discovery.service
+[Unit]
+Description=Financial ML Strategy Discovery Service
+After=financial-ml-training.service
+
+[Service]
+Type=oneshot
+User=pi
+Group=pi
+WorkingDirectory=/opt/financial_ml
+ExecStart=/opt/financial_ml/venv/bin/python -m strategy_discovery discover --symbols BTC/USD,ETH/USD --timeframe algorithmic
+StandardOutput=journal
+StandardError=journal
+TimeoutSec=7200
+MemoryLimit=4G
+
+# /etc/systemd/system/financial-ml-discovery.timer
+[Unit]
+Description=Run Financial ML Strategy Discovery Weekly
+Requires=financial-ml-discovery.service
+
+[Timer]
+OnCalendar=weekly
+Persistent=true
+RandomizedDelaySec=600
+
+[Install]
+WantedBy=timers.target
