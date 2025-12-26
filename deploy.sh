@@ -301,7 +301,53 @@ clone_repository() {
     run_cmd git clone --depth 1 --branch "$GIT_BRANCH" \
         "https://github.com/${GITHUB_REPO}.git" "$CLONE_DIR"
     
+    # Debug: Show repository structure
+    log_info "Repository contents:"
+    find "$CLONE_DIR" -type f -name "*.py" -o -name "*.yaml" -o -name "*.yml" -o -name "*.conf" -o -name "*.sh" 2>/dev/null | head -20
+    
     echo "$CLONE_DIR"
+}
+
+find_file() {
+    # Find a file anywhere in the clone directory
+    local CLONE_DIR="$1"
+    local FILENAME="$2"
+    
+    # First try exact path
+    if [[ -f "$CLONE_DIR/$FILENAME" ]]; then
+        echo "$CLONE_DIR/$FILENAME"
+        return 0
+    fi
+    
+    # Search recursively
+    local FOUND=$(find "$CLONE_DIR" -type f -name "$FILENAME" 2>/dev/null | head -1)
+    if [[ -n "$FOUND" ]]; then
+        echo "$FOUND"
+        return 0
+    fi
+    
+    return 1
+}
+
+find_directory() {
+    # Find a directory anywhere in the clone directory
+    local CLONE_DIR="$1"
+    local DIRNAME="$2"
+    
+    # First try exact path
+    if [[ -d "$CLONE_DIR/$DIRNAME" ]]; then
+        echo "$CLONE_DIR/$DIRNAME"
+        return 0
+    fi
+    
+    # Search recursively
+    local FOUND=$(find "$CLONE_DIR" -type d -name "$DIRNAME" 2>/dev/null | head -1)
+    if [[ -n "$FOUND" ]]; then
+        echo "$FOUND"
+        return 0
+    fi
+    
+    return 1
 }
 
 setup_virtualenv() {
@@ -320,9 +366,17 @@ install_python_packages() {
     log_step "Installing Python packages"
     
     local CLONE_DIR="$1"
-    local REQUIREMENTS="$CLONE_DIR/requirements.txt"
     
-    if [[ -f "$REQUIREMENTS" ]]; then
+    # Find requirements.txt anywhere in the repo
+    local REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements.txt")
+    
+    # Also check for requirements_txt.txt (alternative name)
+    if [[ -z "$REQUIREMENTS" ]]; then
+        REQUIREMENTS=$(find_file "$CLONE_DIR" "requirements_txt.txt")
+    fi
+    
+    if [[ -n "$REQUIREMENTS" ]] && [[ -f "$REQUIREMENTS" ]]; then
+        log_info "Found requirements at: $REQUIREMENTS"
         run_cmd "$INSTALL_DIR/venv/bin/pip" install -r "$REQUIREMENTS"
     else
         log_warn "requirements.txt not found, installing core packages..."
@@ -347,9 +401,10 @@ deploy_python_modules() {
     )
     
     for module in "${MODULES[@]}"; do
-        if [[ -f "$CLONE_DIR/$module" ]]; then
-            run_cmd cp "$CLONE_DIR/$module" "$INSTALL_DIR/"
-            log_info "Deployed $module"
+        local FOUND_PATH=$(find_file "$CLONE_DIR" "$module")
+        if [[ -n "$FOUND_PATH" ]]; then
+            run_cmd cp "$FOUND_PATH" "$INSTALL_DIR/"
+            log_info "Deployed $module (from $FOUND_PATH)"
         else
             log_warn "Module $module not found in repository"
         fi
@@ -374,9 +429,10 @@ deploy_config() {
     local CONFIG_FOUND=false
     
     for config_name in "${CONFIG_FILES[@]}"; do
-        if [[ -f "$CLONE_DIR/$config_name" ]]; then
-            run_cmd cp "$CLONE_DIR/$config_name" "$CONFIG_DIR/config.yaml"
-            log_info "Deployed configuration from $config_name"
+        local FOUND_PATH=$(find_file "$CLONE_DIR" "$config_name")
+        if [[ -n "$FOUND_PATH" ]]; then
+            run_cmd cp "$FOUND_PATH" "$CONFIG_DIR/config.yaml"
+            log_info "Deployed configuration from $FOUND_PATH"
             CONFIG_FOUND=true
             break
         fi
@@ -471,12 +527,27 @@ parse_and_install_services() {
     log_step "Installing systemd services"
     
     local CLONE_DIR="$1"
-    local SERVICES_CONF="$CLONE_DIR/systemd/services.conf"
     
-    if [[ ! -f "$SERVICES_CONF" ]]; then
-        log_error "services.conf not found at $SERVICES_CONF"
+    # Find services.conf anywhere in the repo
+    local SERVICES_CONF=$(find_file "$CLONE_DIR" "services.conf")
+    
+    if [[ -z "$SERVICES_CONF" ]]; then
+        # Also try looking in systemd directory
+        local SYSTEMD_DIR_FOUND=$(find_directory "$CLONE_DIR" "systemd")
+        if [[ -n "$SYSTEMD_DIR_FOUND" ]] && [[ -f "$SYSTEMD_DIR_FOUND/services.conf" ]]; then
+            SERVICES_CONF="$SYSTEMD_DIR_FOUND/services.conf"
+        fi
+    fi
+    
+    if [[ -z "$SERVICES_CONF" ]] || [[ ! -f "$SERVICES_CONF" ]]; then
+        log_error "services.conf not found in repository"
+        log_info "Searched in: $CLONE_DIR"
+        log_info "Repository contents:"
+        find "$CLONE_DIR" -type f -name "*.conf" 2>/dev/null || echo "  No .conf files found"
         return 1
     fi
+    
+    log_info "Found services.conf at: $SERVICES_CONF"
     
     # Parse services.conf and create individual unit files
     local current_file=""
