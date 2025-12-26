@@ -191,11 +191,18 @@ check_system() {
 install_dependencies() {
     log_step "Installing system dependencies"
     
+    # Add deadsnakes PPA for Python 3.11 (not in default Ubuntu 22.04 repos)
+    log_info "Adding deadsnakes PPA for Python 3.11..."
     run_cmd apt update
+    run_cmd apt install -y software-properties-common
+    run_cmd add-apt-repository -y ppa:deadsnakes/ppa
+    run_cmd apt update
+    
     run_cmd apt install -y \
         python3.11 \
         python3.11-dev \
         python3.11-venv \
+        python3.11-distutils \
         python3-pip \
         build-essential \
         git \
@@ -212,6 +219,14 @@ install_dependencies() {
         wget \
         htop \
         jq
+    
+    # Ensure pip is available for Python 3.11
+    if ! command -v /usr/bin/python3.11 &> /dev/null; then
+        log_error "Python 3.11 installation failed"
+        exit 1
+    fi
+    
+    log_info "Python 3.11 installed successfully"
 }
 
 install_talib() {
